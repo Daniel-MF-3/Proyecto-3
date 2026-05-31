@@ -681,8 +681,191 @@ El display usado es de cátodo común. Por tanto, un `1` lógico enciende el seg
 siete_seg[6:0] = {g,f,e,d,c,b,a}
 ```
 
-*Foto diagrama del módulo controlador de display*
-
 ---
 
-## 13. 
+## 13. Ejemplo y análisis de una simulación funcional del sistema completo.
+### Ejemplo y análisis de simulación funcional del sistema completo
+
+Para verificar el funcionamiento integral del sistema, se realizó una simulación funcional del módulo superior `top`. La prueba considera el flujo completo desde el estímulo de entrada equivalente a una pulsación limpia del teclado, hasta la generación de los valores que serán enviados al controlador de los displays de siete segmentos.
+
+En la simulación no se modeló el rebote físico de las teclas ni el tiempo completo de escaneo del teclado matricial. En su lugar, se forzaron internamente las señales ya estabilizadas `tecla_ok` y `pulse_fsm`, equivalentes a la salida del bloque `scanner + debounce`. Esto permite validar directamente la interacción entre la FSM de captura, el divisor entero, el selector de cociente/residuo, el conversor binario a BCD y el bloque de visualización.
+
+Como caso principal se simuló la operación:
+
+[
+127 \div 31
+]
+
+La secuencia de entrada fue:
+
+```text
+1 → 2 → 7 → A → 3 → 1 → A
+```
+
+Durante la captura del primer número, la FSM almacena el dividendo en formato binario. La consola de simulación muestra que, después de ingresar el dividendo, el sistema contiene:
+
+```text
+Dividendo bin = 127
+Divisor bin   = 0
+BCD display   = f127
+```
+
+El valor `f127` indica que el display más significativo se mantiene apagado o en blanco, mientras que los otros tres dígitos muestran el número ingresado. Luego, al presionar la tecla `A`, la FSM cambia a la etapa de captura del divisor. En esta fase el display se limpia parcialmente y queda preparado para recibir el segundo número.
+
+Posteriormente se ingresa el divisor `31`. La simulación reporta:
+
+```text
+Dividendo bin = 127
+Divisor bin   = 31
+BCD display   = f031
+```
+
+Esto confirma que ambos operandos fueron capturados correctamente antes de iniciar la división. Al presionar nuevamente `A`, la FSM genera la señal de validación hacia el bloque divisor. Una vez finalizado el cálculo, el sistema alcanza el estado de resultado:
+
+```text
+Estado FSM  = 8
+div_done    = 1
+div_zero    = 0
+Cociente Q  = 4
+Residuo R   = 3
+```
+
+El resultado obtenido coincide con la operación esperada:
+
+[
+127 = 31 \cdot 4 + 3
+]
+
+Por tanto, el bloque de división entrega correctamente un cociente de `4` y un residuo de `3`.
+
+La tecla `B` se utiliza para alternar el valor desplegado entre cociente y residuo. Después de presionar `B`, la señal `mostrar_residuo` cambia de `0` a `1`, y el valor mostrado por el sistema corresponde al residuo:
+
+```text
+mostrar_residuo = 1
+BCD display     = 0003
+```
+
+Esto confirma que el selector de salida funciona correctamente y que el residuo es enviado al bloque de conversión binario a BCD para su posterior visualización en los displays.
+
+También se verificaron otros casos funcionales. Para la operación:
+
+[
+11 \div 3
+]
+
+la simulación obtuvo:
+
+```text
+Cociente Q = 3
+Residuo R  = 2
+```
+
+lo cual cumple:
+
+[
+11 = 3 \cdot 3 + 2
+]
+
+Después de presionar `B`, el display muestra:
+
+```text
+BCD display = 0002
+```
+
+correspondiente al residuo.
+
+Para el caso:
+1/1
+
+
+se obtuvo:
+
+```text
+Cociente Q = 1
+Residuo R  = 0
+```
+
+y el display alterna entre `0001` para el cociente y `0000` para el residuo. Este caso permite comprobar el funcionamiento correcto para operandos mínimos diferentes de cero.
+
+Finalmente, se probó la división entre cero usando:
+
+78/0
+
+En este caso, el sistema no realiza una división válida, sino que activa la bandera de error:
+
+```text
+div_zero = 1
+BCD display = e000
+```
+
+El valor `e000` representa una condición de error en el display, indicando que el divisor ingresado fue cero. Esta respuesta evita interpretar el resultado como un cociente válido.
+
+
+
+## 14. Análisis de consumo de recursos en la FPGA (LUTs, FFs, etc.) y del consumo de potencia
+
+| Métrica | Valor |
+|----------|------:|
+| Number of wires | 1396 |
+| Number of wire bits | 2716 |
+| Number of public wires | 1396 |
+| Number of public wire bits | 2716 |
+| Number of memories | 0 |
+| Number of memory bits | 0 |
+| Number of processes | 0 |
+| Number of cells | 1776 |
+
+## Celdas:
+
+| Tipo | Cantidad |
+|------|---------:|
+| ALU | 215 |
+| DFFC | 47 |
+| DFFCE | 152 |
+| DFFP | 1 |
+| DFFPE | 9 |
+| GND | 1 |
+| IBUF | 6 |
+| LUT1 | 452 |
+| LUT2 | 178 |
+| LUT3 | 98 |
+| LUT4 | 226 |
+| MUX2_LUT5 | 224 |
+| MUX2_LUT6 | 94 |
+| MUX2_LUT7 | 39 |
+| MUX2_LUT8 | 15 |
+| OBUF | 18 |
+| VCC | 1 |
+
+## Problemas durante el desarrollo del proyecto
+
+- **Comprensión del algoritmo de división.**  
+  Uno de los primeros problemas fue interpretar correctamente el algoritmo de división entera sin signo y adaptarlo a hardware. Aunque el procedimiento matemático es directo en papel, su implementación secuencial requiere definir con claridad qué registros almacenan el dividendo, divisor, cociente parcial y residuo parcial. Además, fue necesario distinguir entre el residuo desplazado antes de la resta y el residuo final después de aplicar la comparación con el divisor.
+
+- **Inconsistencia entre el enunciado y el rango requerido.**  
+  El enunciado indicaba un dividendo representable en 6 bits y un divisor representable en 4 bits. Sin embargo, también se solicitaba que el sistema pudiera dividir al menos \(127_D\) entre \(31_D\). Esto generó una inconsistencia, ya que \(127_D\) requiere 7 bits y \(31_D\) requiere 5 bits. Por esta razón, el diseño se ajustó internamente para manejar un dividendo de 7 bits y un divisor de 5 bits.
+
+- **Adaptación del proyecto base de suma al sistema de división.**  
+  El proyecto anterior estaba diseñado para capturar dos números decimales, sumarlos y mostrar el resultado en displays de siete segmentos. Para este proyecto fue necesario reutilizar la estructura de teclado, debouncer, FSM de captura y display, pero reemplazando el bloque aritmético de suma por un bloque de división entera. Esto implicó modificar la lógica de validación, el manejo de resultados y la selección entre cociente y residuo.
+
+- **Diferenciación entre cociente y residuo en el despliegue.**  
+  A diferencia de la suma, la división produce dos resultados: cociente y residuo. Por esta razón fue necesario agregar una señal de selección controlada mediante la tecla `B`, permitiendo alternar entre ambos valores en el display. Durante las pruebas se observó que, si la señal de selección no se reiniciaba al comenzar una nueva operación, el sistema podía iniciar mostrando el residuo en vez del cociente.
+
+- **Problemas con la primera implementación del divisor.**  
+  Las primeras versiones del divisor basado en el algoritmo  presentaron resultados incorrectos en hardware. Por ejemplo, para la operación 11/2 , el cociente se calculaba correctamente como `5`, pero el residuo mostrado era `3` en lugar de `1`. Esto indicaba que el sistema estaba conservando el residuo previo  antes de la última resta, y salia antes por tanto no reportaba  el residuo final.
+
+- **Diferencia entre simulación aislada y funcionamiento en FPGA.**  
+  El módulo divisor llegó a funcionar correctamente en un testbench aislado, pero al integrarse en el sistema completo y probarse en la FPGA continuaron apareciendo errores. Esto obligó a realizar pruebas por etapas: primero verificando el `top`, luego forzando valores internos, después validando el divisor de forma independiente.
+
+- **Uso de pruebas forzadas para localizar el error.**  
+  Para descartar errores de teclado o de captura, se creó una versión temporal del `top` que ignoraba las entradas del keypad y forzaba internamente la operación 11/2 . Esta prueba permitió comprobar que el sistema debía alternar entre `0005` y `0001`. Al obtener inicialmente `0005` y `0003`, se confirmó que el problema estaba en la generación del residuo y no en el teclado ni en el display.
+
+- **Problemas de temporización con una versión combinacional.**  
+  Una versión combinacional del divisor permitió corregir el cálculo del residuo, pero generó problemas durante el proceso de PNR, probablemente debido a una ruta combinacional demasiado larga para operar con el reloj de 27 MHz de la Tang Nano. Esto evidenció la necesidad de evitar cálculos aritméticos extensos en un solo ciclo de reloj.
+
+- **Intento de implementación mediante pipeline.**  
+  Se probó una versión con pipeline para reducir la ruta crítica. Aunque esta solución permitió compilar, presentó problemas de retención del resultado, ya que las señales `done`, `Q` y `R` podían durar solo un ciclo de reloj o no quedar estables para el sistema de despliegue. Esto causaba que el display mostrara `0000` aunque el cálculo interno hubiera ocurrido.
+
+- **Solución final mediante restas sucesivas.**  
+  Para el rango requerido del proyecto, se optó por una implementación secuencial mediante restas sucesivas. Aunque no es la solución más rápida en términos algorítmicos, resulta suficiente para operandos pequeños, ya que el peor caso es 127/31, lo cual requiere un número reducido de ciclos para una FPGA operando a 27 MHz. Esta versión logró compilar correctamente y produjo resultados válidos 
+

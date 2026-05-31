@@ -22,8 +22,8 @@ module top (
     logic tecla_v_raw;
     logic [3:0] tecla_p_raw;
 
-    logic pulse_ok;
-    logic [3:0] tecla_ok;
+    wire pulse_ok;
+    wire [3:0] tecla_ok;
 
     logic pulse_fsm;
 
