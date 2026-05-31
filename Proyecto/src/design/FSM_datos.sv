@@ -4,9 +4,10 @@ module FSM_control (
     input  logic pulse_tecla,
     input  logic [3:0] pos_tecla,
 
-    output logic [13:0] n1_bin,
-    output logic [13:0] n2_bin,
-    output logic [13:0] suma,
+    output logic [6:0] dividendo_bin,
+    output logic [4:0] divisor_bin,
+    output logic       valid_div,
+    output logic       mostrar_residuo,
     output logic [3:0] estado_vis,
 
     output logic [3:0] c1_o, d1_o, u1_o,
@@ -29,9 +30,11 @@ module FSM_control (
 
     logic [3:0] c1, d1, u1;
     logic [3:0] c2, d2, u2;
+    logic       sel_residuo;
 
-    // Función explícita para aceptar solo teclas 0-9.
-    // Esto evita cualquier problema raro con comparaciones tipo <= 9.
+    logic [13:0] n1_tmp;
+    logic [13:0] n2_tmp;
+
     function automatic logic es_digito(input logic [3:0] tecla);
         begin
             unique case (tecla)
@@ -48,7 +51,12 @@ module FSM_control (
         end
     endfunction
 
-    // Conversión cdu decimal a binario: c*100 + d*10 + u
+    function automatic logic es_selector(input logic [3:0] tecla);
+        begin
+            es_selector = (tecla == 4'hB);
+        end
+    endfunction
+
     function automatic logic [13:0] dec3_to_bin(
         input logic [3:0] c,
         input logic [3:0] d,
@@ -60,14 +68,11 @@ module FSM_control (
             dw = {10'd0, d};
             uw = {10'd0, u};
 
-            // 100 = 64 + 32 + 4
-            // 10  = 8 + 2
             dec3_to_bin = (cw << 6) + (cw << 5) + (cw << 2) +
                           (dw << 3) + (dw << 1) + uw;
         end
     endfunction
 
-    // Salidas hacia top/display
     assign c1_o = c1;
     assign d1_o = d1;
     assign u1_o = u1;
@@ -76,14 +81,22 @@ module FSM_control (
     assign d2_o = d2;
     assign u2_o = u2;
 
-    assign estado_vis = state;
+    assign estado_vis      = state;
+    assign mostrar_residuo = sel_residuo;
 
-    // Valores binarios siempre calculados desde los dígitos visibles
-    assign n1_bin = dec3_to_bin(c1, d1, u1);
-    assign n2_bin = dec3_to_bin(c2, d2, u2);
-    assign suma   = n1_bin + n2_bin;
+    // valid_div es combinacional para que el divisor lo vea en el mismo flanco
+    // en que se confirma el divisor con A.
+    assign valid_div = pulse_tecla && es_enter(pos_tecla) &&
+                       ((state == S_N2_D2) || (state == S_N2_D3) || (state == S_N2_ENTER));
 
-    // FSM y ruta de datos juntas
+    assign n1_tmp = dec3_to_bin(c1, d1, u1);
+    assign n2_tmp = dec3_to_bin(c2, d2, u2);
+
+    // Saturación simple para cumplir el rango del hardware:
+    // A: 0..127, B: 0..31.
+    assign dividendo_bin = (n1_tmp > 14'd127) ? 7'd127 : n1_tmp[6:0];
+    assign divisor_bin   = (n2_tmp > 14'd31)  ? 5'd31  : n2_tmp[4:0];
+
     always_ff @(posedge clk or posedge reset) begin
         if (reset) begin
             state <= S_N1_D1;
@@ -95,12 +108,14 @@ module FSM_control (
             c2 <= 4'd0;
             d2 <= 4'd0;
             u2 <= 4'd0;
+
+            sel_residuo <= 1'b0;
         end else begin
             if (pulse_tecla) begin
                 unique case (state)
 
                     // -------------------------
-                    // Número 1
+                    // Dividendo A
                     // -------------------------
                     S_N1_D1: begin
                         if (es_digito(pos_tecla)) begin
@@ -137,11 +152,10 @@ module FSM_control (
                         if (es_enter(pos_tecla)) begin
                             state <= S_N2_D1;
                         end
-                        // Cualquier dígito extra se ignora.
                     end
 
                     // -------------------------
-                    // Número 2
+                    // Divisor B
                     // -------------------------
                     S_N2_D1: begin
                         if (es_digito(pos_tecla)) begin
@@ -178,30 +192,27 @@ module FSM_control (
                         if (es_enter(pos_tecla)) begin
                             state <= S_RESULTADO;
                         end
-                        // Cualquier dígito extra se ignora.
                     end
 
                     // -------------------------
                     // Resultado
                     // -------------------------
                     S_RESULTADO: begin
-                        // Se queda mostrando resultado.
-                        // Para empezar otra operación, usar reset físico.
-                        state <= S_RESULTADO;
+                        if (es_selector(pos_tecla)) begin
+                            sel_residuo <= ~sel_residuo;
+                        end
                     end
 
                     default: begin
                         state <= S_N1_D1;
-
                         c1 <= 4'd0;
                         d1 <= 4'd0;
                         u1 <= 4'd0;
-
                         c2 <= 4'd0;
                         d2 <= 4'd0;
                         u2 <= 4'd0;
+                        sel_residuo <= 1'b0;
                     end
-
                 endcase
             end
         end

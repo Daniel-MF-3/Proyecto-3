@@ -1,7 +1,7 @@
 module bin_to_bcd (
     input  logic clk,
     input  logic reset,
-    input  logic [10:0] binario, // Rango esperado: 0 a 1998
+    input  logic [10:0] binario,
     output logic [3:0] millar,
     output logic [3:0] centena,
     output logic [3:0] decena,
@@ -32,7 +32,7 @@ module bin_to_bcd (
         if (reset) begin
             state <= S_IDLE;
 
-            bin_reg <= 11'd0;
+            bin_reg <= 11'h7FF; // fuerza conversión inicial aunque binario sea 0
             temp    <= 11'd0;
 
             millar_work  <= 4'd0;
