@@ -53,7 +53,25 @@ El sistema completo se organiza en los siguientes módulos principales:
 
 ## 4. Diagrama de bloques del sistema
 
-*Foto diagrama de bloques general del sistema*
+### 4.1 Diagrama de bloques del scanner
+![alt text](image-1.png)
+
+### 4.2 Diagrama de bloques del debouncer
+![alt text](image-2.png)
+
+### 4.3 Diagrama de bloques del FSM datos
+![alt text](image-3.png)
+
+### 4.4 Diagrama de bloques del FSM divisor
+![alt text](image-4.png)
+
+### 4.4 Diagrama de bloques de Bin_to_BCD
+
+![alt text](image-5.png)
+
+### 4.5 Diagrama de bloques de 7segmentos 
+
+![alt text](image-6.png)
 
 El flujo general de señales puede resumirse de la siguiente forma:
 
@@ -66,7 +84,7 @@ debounce
     ↓
 FSM_control
     ↓
-divisor_entero_fix
+divisor_entero
     ↓
 bin_to_bcd
     ↓
@@ -75,7 +93,6 @@ controlador_display_total
 Display de siete segmentos
 ```
 
-*Tabla resumen de módulos del sistema*
 
 ---
 
@@ -861,11 +878,11 @@ El valor `e000` representa una condición de error en el display, indicando que 
   Para descartar errores de teclado o de captura, se creó una versión temporal del `top` que ignoraba las entradas del keypad y forzaba internamente la operación 11/2 . Esta prueba permitió comprobar que el sistema debía alternar entre `0005` y `0001`. Al obtener inicialmente `0005` y `0003`, se confirmó que el problema estaba en la generación del residuo y no en el teclado ni en el display.
 
 - **Problemas de temporización con una versión combinacional.**  
-  Una versión combinacional del divisor permitió corregir el cálculo del residuo, pero generó problemas durante el proceso de PNR, probablemente debido a una ruta combinacional demasiado larga para operar con el reloj de 27 MHz de la Tang Nano. Esto evidenció la necesidad de evitar cálculos aritméticos extensos en un solo ciclo de reloj.
+  Una versión combinacional del divisor permitió corregir el cálculo del residuo, pero generó problemas durante el proceso de PNR, probablemente debido a una ruta combinacional demasiado larga para operar con el reloj de 27 MHz de la Tang Nano.
 
 - **Intento de implementación mediante pipeline.**  
   Se probó una versión con pipeline para reducir la ruta crítica. Aunque esta solución permitió compilar, presentó problemas de retención del resultado, ya que las señales `done`, `Q` y `R` podían durar solo un ciclo de reloj o no quedar estables para el sistema de despliegue. Esto causaba que el display mostrara `0000` aunque el cálculo interno hubiera ocurrido.
 
-- **Solución final mediante restas sucesivas.**  
+- **Solución a los problemas se encontro mediante mediante restas sucesivas.**  
   Para el rango requerido del proyecto, se optó por una implementación secuencial mediante restas sucesivas. Aunque no es la solución más rápida en términos algorítmicos, resulta suficiente para operandos pequeños, ya que el peor caso es 127/31, lo cual requiere un número reducido de ciclos para una FPGA operando a 27 MHz. Esta versión logró compilar correctamente y produjo resultados válidos 
 
