@@ -452,7 +452,7 @@ end
 
 ---
 
-## 10. Módulo `divisor_entero_fix`
+## 10. Módulo `divisor_entero`
 
 ```systemverilog
 module divisor_entero_fix #(
